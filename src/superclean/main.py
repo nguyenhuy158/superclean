@@ -7,6 +7,8 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from typing import Optional
 import os
 import shutil
+import platform
+import psutil
 
 from .core import CleanerRegistry
 from .cleaners.python_node import PythonCleaner, NodeCleaner
@@ -83,7 +85,7 @@ def main(
 
 @app.command()
 def status(ctx: typer.Context):
-    """Show a high-level dashboard of potential savings."""
+    """Show a high-level dashboard of system health and potential savings."""
     registry = get_registry()
     category_savings = {}
     total_savings = 0
@@ -125,10 +127,66 @@ def status(ctx: typer.Context):
     
     console.print(Columns(panels))
 
-    # System Info
-    import platform
+    # System Resources Panel
+    try:
+        cpu_usage = psutil.cpu_percent(interval=0.1)
+        mem = psutil.virtual_memory()
+        disk = psutil.disk_usage('/')
+        
+        def get_bar(pct):
+            filled = int(pct / 10)
+            return f"[{'#' * filled}{' ' * (10 - filled)}] {pct}%"
+
+        res_table = Table.grid(expand=True)
+        res_table.add_column(style="cyan")
+        res_table.add_column(justify="right")
+
+        res_table.add_row("CPU Usage", get_bar(cpu_usage))
+        res_table.add_row("RAM Usage", get_bar(mem.percent))
+        res_table.add_row("Disk Usage", get_bar(disk.percent))
+
+        console.print(Panel(res_table, title="System Resources", border_style="magenta"))
+    except Exception:
+        pass
+
+    # System Info Footer
     sys_info = f"OS: [cyan]{platform.system()} {platform.release()}[/cyan] | SuperClean: [cyan]{__version__}[/cyan]"
     console.print(f"\n[dim]{sys_info}[/dim]")
+
+
+@app.command()
+def info():
+    """Show detailed system information."""
+    table = Table(title="System Information", show_header=False, box=None)
+    table.add_column("Property", style="bold cyan")
+    table.add_column("Value")
+
+    # OS Info
+    table.add_row("OS", f"{platform.system()} {platform.release()}")
+    table.add_row("Machine", platform.machine())
+    table.add_row("Processor", platform.processor())
+    table.add_row("Python", platform.python_version())
+
+    # CPU Info
+    cpu_count = psutil.cpu_count(logical=False)
+    logical_cpu = psutil.cpu_count(logical=True)
+    table.add_row("CPU Cores", f"{cpu_count} physical, {logical_cpu} logical")
+    table.add_row("CPU Usage", f"{psutil.cpu_percent(interval=0.1)}%")
+
+    # Memory Info
+    mem = psutil.virtual_memory()
+    used_mem = mem.total - mem.available
+    table.add_row("Memory Total", format_size(mem.total))
+    table.add_row("Memory Used", f"{format_size(used_mem)} ({mem.percent}%)")
+    table.add_row("Memory Free", format_size(mem.available))
+
+    # Disk Info
+    disk = psutil.disk_usage('/')
+    table.add_row("Disk Total", format_size(disk.total))
+    table.add_row("Disk Used", f"{format_size(disk.used)} ({disk.percent}%)")
+    table.add_row("Disk Free", format_size(disk.free))
+
+    console.print(Panel(table, expand=False, border_style="cyan"))
 
 
 @app.command()

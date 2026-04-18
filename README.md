@@ -13,6 +13,7 @@ pip install superclean
 ```bash
 sclean --help
 sclean status          # High-level health dashboard
+sclean info            # Detailed system resource info
 sclean list-cleaners   # Detailed list of all cleaners
 sclean all             # Run all cleaners
 sclean projects        # Scan local directories for project artifacts (node_modules, etc.)
