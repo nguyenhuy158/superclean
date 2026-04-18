@@ -15,6 +15,7 @@ from .cleaners.python_node import PythonCleaner, NodeCleaner
 from .cleaners.docker_nix import DockerCleaner, NixCleaner
 from .cleaners.system import SystemCleaner
 from .cleaners.dev_tools import BrewCleaner, XcodeCleaner, CargoCleaner, CondaCleaner
+from .cleaners.utilities import LazyGitCleaner, LazyDockerCleaner
 from . import __version__
 
 app = typer.Typer(help="Universal CLI tool to clean development caches.")
@@ -32,7 +33,25 @@ def get_registry():
     registry.register(XcodeCleaner())
     registry.register(CargoCleaner())
     registry.register(CondaCleaner())
+    registry.register(LazyGitCleaner())
+    registry.register(LazyDockerCleaner())
     return registry
+
+
+def get_useful_tools():
+    """List of tools to check for installation and version."""
+    return [
+        ("rg", "ripgrep"),
+        ("uv", "uv"),
+        ("lazygit", "lazygit"),
+        ("lazydocker", "lazydocker"),
+        ("fzf", "fzf"),
+        ("gh", "GitHub CLI"),
+        ("jq", "jq"),
+        ("fd", "fd"),
+        ("bat", "bat"),
+        ("tldr", "tldr"),
+    ]
 
 
 def format_size(size_bytes):
@@ -145,13 +164,66 @@ def status(ctx: typer.Context):
         res_table.add_row("RAM Usage", get_bar(mem.percent))
         res_table.add_row("Disk Usage", get_bar(disk.percent))
 
-        console.print(Panel(res_table, title="System Resources", border_style="magenta"))
+        # Tool Health check
+        useful_tools = get_useful_tools()
+        installed_count = sum(1 for cmd, name in useful_tools if shutil.which(cmd))
+        res_table.add_row("Toolbox", f"[bold green]{installed_count}/{len(useful_tools)}[/bold green] tools installed")
+
+        console.print(Panel(res_table, title="System Resources & Tools", border_style="magenta"))
     except Exception:
         pass
 
     # System Info Footer
     sys_info = f"OS: [cyan]{platform.system()} {platform.release()}[/cyan] | SuperClean: [cyan]{__version__}[/cyan]"
     console.print(f"\n[dim]{sys_info}[/dim]")
+
+
+@app.command()
+def check():
+    """Check if useful developer tools are installed and their versions."""
+    table = Table(title="Developer Tools Health Check")
+    table.add_column("Status", justify="center")
+    table.add_column("Tool", style="cyan")
+    table.add_column("Name", style="green")
+    table.add_column("Version", style="magenta")
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        transient=True,
+    ) as progress:
+        tools = get_useful_tools()
+        task = progress.add_task("Checking tools...", total=len(tools))
+        
+        for cmd, name in tools:
+            path = shutil.which(cmd)
+            status = "[bold green]✅[/bold green]" if path else "[bold red]❌[/bold red]"
+            version = "N/A"
+            
+            if path:
+                # Try to get version
+                try:
+                    # Most tools support --version
+                    v_cmd = [cmd, "--version"]
+                    # Special cases
+                    if cmd == "uv":
+                        v_cmd = ["uv", "--version"]
+                    
+                    import subprocess
+                    proc = subprocess.run(v_cmd, capture_output=True, text=True, timeout=1)
+                    if proc.returncode == 0:
+                        # Extract first line or part of it
+                        version = proc.stdout.split('\n')[0].strip()
+                        # Shorten if too long
+                        if len(version) > 40:
+                            version = version[:37] + "..."
+                except Exception:
+                    version = "Found"
+
+            table.add_row(status, cmd, name, version)
+            progress.advance(task)
+
+    console.print(table)
 
 
 @app.command()

@@ -14,6 +14,7 @@ pip install superclean
 sclean --help
 sclean status          # High-level health dashboard
 sclean info            # Detailed system resource info
+sclean check           # Check for useful developer tools
 sclean list-cleaners   # Detailed list of all cleaners
 sclean all             # Run all cleaners
 sclean projects        # Scan local directories for project artifacts (node_modules, etc.)
