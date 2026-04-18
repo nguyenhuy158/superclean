@@ -9,6 +9,7 @@ from .core import CleanerRegistry
 from .cleaners.python_node import PythonCleaner, NodeCleaner
 from .cleaners.docker_nix import DockerCleaner, NixCleaner
 from .cleaners.system import SystemCleaner
+from .cleaners.dev_tools import BrewCleaner, XcodeCleaner, CargoCleaner, CondaCleaner
 from . import __version__
 
 app = typer.Typer(help="Universal CLI tool to clean development caches.")
@@ -22,6 +23,10 @@ def get_registry():
     registry.register(DockerCleaner())
     registry.register(NixCleaner())
     registry.register(SystemCleaner())
+    registry.register(BrewCleaner())
+    registry.register(XcodeCleaner())
+    registry.register(CargoCleaner())
+    registry.register(CondaCleaner())
     return registry
 
 
@@ -102,6 +107,128 @@ def list_cleaners(ctx: typer.Context):
 
 
 @app.command()
+def projects(
+    ctx: typer.Context,
+    path: str = typer.Argument(".", help="Directory to scan"),
+    delete: bool = typer.Option(False, "--delete", "-X", help="Delete found folders"),
+    recursive: bool = typer.Option(True, help="Scan recursively"),
+):
+    """Scan for local project development folders (node_modules, venv, etc.) and optionally delete them."""
+    dry_run = ctx.obj.get("dry_run", False)
+    target_names = {
+        "node_modules",
+        "venv",
+        ".venv",
+        "__pycache__",
+        "target",
+        "build",
+        "dist",
+        ".next",
+        ".svelte-kit",
+        "bin",
+        "obj",
+    }
+    found_folders = []
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        transient=True,
+    ) as progress:
+        task = progress.add_task(f"Scanning {path}...", total=None)
+
+        abs_path = os.path.abspath(path)
+        for root, dirs, files in os.walk(abs_path):
+            # Check if current directory itself is a target
+            # However, usually we look for targets inside projects.
+            # If we find a target, we don't need to look inside it.
+            i = 0
+            while i < len(dirs):
+                d = dirs[i]
+                if d in target_names:
+                    full_path = os.path.join(root, d)
+                    found_folders.append(full_path)
+                    # Don't recurse into found target folders
+                    dirs.pop(i)
+                else:
+                    i += 1
+            if not recursive:
+                break
+            progress.advance(task)
+
+    if not found_folders:
+        console.print("[yellow]No project development folders found.[/yellow]")
+        return
+
+    table = Table(title=f"Found Project Folders in {path}")
+    table.add_column("Path", style="cyan")
+    table.add_column("Size", justify="right", style="magenta")
+
+    total_size = 0
+    # We need a dummy cleaner to use get_dir_size or just use a helper
+    from .core import BaseCleaner, CleanResult
+
+    class SizeHelper(BaseCleaner):
+        @property
+        def name(self):
+            return ""
+
+        @property
+        def description(self):
+            return ""
+
+        def check_space(self):
+            return 0
+
+        def clean(self, dry_run=False):
+            return CleanResult("", 0, True)
+
+    helper = SizeHelper()
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        transient=True,
+    ) as progress:
+        task = progress.add_task("Calculating sizes...", total=len(found_folders))
+        for p in found_folders:
+            size = helper.get_dir_size(p)
+            total_size += size
+            table.add_row(p, format_size(size))
+            progress.advance(task)
+
+    console.print(table)
+    console.print(
+        f"\nTotal potential savings: [bold green]{format_size(total_size)}[/bold green]"
+    )
+
+    if delete:
+        if dry_run:
+            console.print(
+                "\n[bold yellow][DRY RUN][/bold yellow] Would delete all found folders."
+            )
+            return
+
+        confirm = typer.confirm("\nAre you sure you want to delete all these folders?")
+        if not confirm:
+            raise typer.Abort()
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            transient=True,
+        ) as progress:
+            task = progress.add_task("Deleting...", total=len(found_folders))
+            for p in found_folders:
+                import shutil
+
+                shutil.rmtree(p, ignore_errors=True)
+                progress.advance(task)
+
+        console.print("\n[bold green]Success![/bold green] All folders deleted.")
+
+
+@app.command()
 def all(
     ctx: typer.Context,
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
@@ -167,6 +294,30 @@ def nix(ctx: typer.Context):
 def system(ctx: typer.Context):
     """Clean system temp files."""
     _clean_specific(ctx, "system")
+
+
+@app.command()
+def brew(ctx: typer.Context):
+    """Clean Homebrew versions."""
+    _clean_specific(ctx, "brew")
+
+
+@app.command()
+def xcode(ctx: typer.Context):
+    """Clean Xcode caches."""
+    _clean_specific(ctx, "xcode")
+
+
+@app.command()
+def cargo(ctx: typer.Context):
+    """Clean Cargo caches."""
+    _clean_specific(ctx, "cargo")
+
+
+@app.command()
+def conda(ctx: typer.Context):
+    """Clean Conda caches."""
+    _clean_specific(ctx, "conda")
 
 
 def _clean_specific(ctx: typer.Context, name: str):

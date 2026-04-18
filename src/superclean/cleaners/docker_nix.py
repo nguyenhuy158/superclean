@@ -57,11 +57,37 @@ class NixCleaner(BaseCleaner):
 
     def clean(self, dry_run: bool = False) -> CleanResult:
         if dry_run:
-            return CleanResult(self.name, 0, True, "Would run 'nix-collect-garbage -d'")
+            return CleanResult(
+                self.name, 0, True, "Would run Nix GC, Profile wipe, and HM expire"
+            )
 
+        msgs = []
+        # 1. Nix GC
         process = subprocess.run(
             ["nix-collect-garbage", "-d"], capture_output=True, text=True
         )
         if process.returncode == 0:
-            return CleanResult(self.name, 0, True, "Nix garbage collected")
-        return CleanResult(self.name, 0, False, f"Error: {process.stderr}")
+            msgs.append("Nix garbage collected")
+
+        # 2. Nix Profile wipe
+        if shutil.which("nix"):
+            subprocess.run(
+                ["nix", "profile", "wipe-generations"], capture_output=True, text=True
+            )
+            msgs.append("Nix profiles wiped")
+
+        # 3. Home-manager expire
+        if shutil.which("home-manager"):
+            subprocess.run(
+                ["home-manager", "expire-generations", "0"],
+                capture_output=True,
+                text=True,
+            )
+            msgs.append("Home-manager generations expired")
+
+        # 4. Nix store optimise
+        if shutil.which("nix-store"):
+            subprocess.run(["nix-store", "--optimise"], capture_output=True, text=True)
+            msgs.append("Nix store optimised")
+
+        return CleanResult(self.name, 0, True, ". ".join(msgs))
