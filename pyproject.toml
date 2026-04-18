@@ -1,6 +1,6 @@
 [project]
 name = "superclean"
-version = "0.4.0"
+version = "0.5.0"
 description = "A universal CLI tool to clean development caches and reclaim disk space."
 authors = [{ name = "Nguyen Huy", email = "nguyenhuy158@gmail.com" }]
 dependencies = [
@@ -8,6 +8,7 @@ dependencies = [
     "rich>=13.0.0",
     "shellingham>=1.5.0",
     "psutil>=5.9.0",
+    "questionary>=2.0.0",
 ]
 requires-python = ">=3.10"
 license = { text = "MIT" }
