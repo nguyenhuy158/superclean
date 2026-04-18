@@ -12,15 +12,18 @@ pip install superclean
 
 ```bash
 sclean --help
-sclean list
+sclean list-cleaners
 sclean all
+sclean -d all   # Dry run mode
 sclean docker
 ```
 
 ## Features
 
-- Clean Python caches (pip, poetry, uv, __pycache__)
-- Clean Node.js caches (npm, yarn, pnpm)
-- Clean Docker resources
-- Clean Nix/NixOS garbage
-- Clean System temp files
+- **Global Dry Run**: Use `-d` or `--dry-run` with any command to preview potential savings.
+- **Detailed List**: `sclean list-cleaners` shows exact space used by each tool.
+- **Python**: Clean Python caches (pip, poetry, uv, __pycache__).
+- **Node.js**: Clean Node.js caches (npm, yarn, pnpm).
+- **Docker**: Clean unused images, containers, and volumes.
+- **Nix/NixOS**: Garbage collection and generation cleanup.
+- **System**: Temporary file removal.

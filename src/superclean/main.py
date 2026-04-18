@@ -54,21 +54,35 @@ def main(
         is_eager=True,
         help="Show the version and exit.",
     ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        "-d",
+        help="Preview changes without deleting any files.",
+    ),
 ):
     """
     SuperClean (sclean) - Reclaim your disk space.
     """
+    ctx.obj = {"dry_run": dry_run}
     if ctx.invoked_subcommand is None:
         console.print("[bold blue]SuperClean (sclean)[/bold blue]")
+        if dry_run:
+            console.print("[bold yellow][DRY RUN MODE][/bold yellow]")
         console.print("Use `sclean --help` for available commands.\n")
-        list_cleaners()
+        list_cleaners(ctx)
 
 
 @app.command()
-def list_cleaners():
+def list_cleaners(ctx: typer.Context):
     """List all available cleaners and potential space savings."""
     registry = get_registry()
-    table = Table(title="Available Cleaners")
+    dry_run = ctx.obj.get("dry_run", False)
+    title = "Available Cleaners"
+    if dry_run:
+        title += " [yellow](Dry Run Mode)[/yellow]"
+
+    table = Table(title=title)
     table.add_column("App", style="cyan")
     table.add_column("Description", style="green")
     table.add_column("Potential Savings", justify="right", style="magenta")
@@ -89,15 +103,20 @@ def list_cleaners():
 
 @app.command()
 def all(
-    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be done"),
+    ctx: typer.Context,
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
 ):
     """Clean all detected application caches."""
     registry = get_registry()
+    dry_run = ctx.obj.get("dry_run", False)
+
     if not force and not dry_run:
         confirm = typer.confirm("Are you sure you want to clean all caches?")
         if not confirm:
             raise typer.Abort()
+
+    if dry_run:
+        console.print("[bold yellow][DRY RUN][/bold yellow] Previewing clean up...")
 
     total_reclaimed = 0
     for cleaner in registry.get_all():
@@ -121,36 +140,62 @@ def all(
 
 
 @app.command()
-def python(dry_run: bool = False):
+def python(ctx: typer.Context):
     """Clean Python caches."""
-    _clean_specific("python", dry_run)
+    _clean_specific(ctx, "python")
 
 
 @app.command()
-def node(dry_run: bool = False):
+def node(ctx: typer.Context):
     """Clean Node.js caches."""
-    _clean_specific("node", dry_run)
+    _clean_specific(ctx, "node")
 
 
 @app.command()
-def docker(dry_run: bool = False):
+def docker(ctx: typer.Context):
     """Clean Docker resources."""
-    _clean_specific("docker", dry_run)
+    _clean_specific(ctx, "docker")
 
 
 @app.command()
-def nix(dry_run: bool = False):
+def nix(ctx: typer.Context):
     """Clean Nix garbage."""
-    _clean_specific("nix", dry_run)
+    _clean_specific(ctx, "nix")
 
 
 @app.command()
-def system(dry_run: bool = False):
+def system(ctx: typer.Context):
     """Clean system temp files."""
-    _clean_specific("system", dry_run)
+    _clean_specific(ctx, "system")
 
 
-def _clean_specific(name: str, dry_run: bool):
+def _clean_specific(ctx: typer.Context, name: str):
+    registry = get_registry()
+    dry_run = ctx.obj.get("dry_run", False)
+    cleaner = registry.get_by_name(name)
+    if not cleaner:
+        console.print(f"[bold red]Error:[/bold red] Cleaner '{name}' not found.")
+        return
+
+    if dry_run:
+        console.print(
+            f"[bold yellow][DRY RUN][/bold yellow] Previewing clean for [bold cyan]{cleaner.name}[/bold cyan]..."
+        )
+    else:
+        console.print(f"Cleaning [bold cyan]{cleaner.name}[/bold cyan]...")
+
+    result = cleaner.clean(dry_run=dry_run)
+    if result.success:
+        msg = (
+            f"Reclaimed {format_size(result.space_reclaimed)}"
+            if not dry_run
+            else "Preview complete"
+        )
+        console.print(f"[bold green]Done![/bold green] {msg}")
+        if result.message:
+            console.print(f"  [dim]{result.message}[/dim]")
+    else:
+        console.print(f"[bold red]Failed:[/bold red] {result.message}")
     registry = get_registry()
     cleaner = registry.get_by_name(name)
     if not cleaner:
