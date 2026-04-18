@@ -1,10 +1,10 @@
 [project]
 name = "superclean"
-version = "0.2.0"
+version = "0.2.1"
 description = "A universal CLI tool to clean development caches and reclaim disk space."
 authors = [{ name = "Nguyen Huy", email = "nguyenhuy158@gmail.com" }]
 dependencies = [
-    "typer[all]>=0.9.0",
+    "typer>=0.9.0",
     "rich>=13.0.0",
     "shellingham>=1.5.0",
 ]
