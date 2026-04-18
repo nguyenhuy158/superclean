@@ -9,6 +9,7 @@ from .core import CleanerRegistry
 from .cleaners.python_node import PythonCleaner, NodeCleaner
 from .cleaners.docker_nix import DockerCleaner, NixCleaner
 from .cleaners.system import SystemCleaner
+from . import __version__
 
 app = typer.Typer(help="Universal CLI tool to clean development caches.")
 console = Console()
@@ -36,8 +37,24 @@ def format_size(size_bytes):
     return f"{s} {size_name[i]}"
 
 
+def version_callback(value: bool):
+    if value:
+        console.print(f"SuperClean version: [bold cyan]{__version__}[/bold cyan]")
+        raise typer.Exit()
+
+
 @app.callback(invoke_without_command=True)
-def main(ctx: typer.Context):
+def main(
+    ctx: typer.Context,
+    version: Optional[bool] = typer.Option(
+        None,
+        "--version",
+        "-v",
+        callback=version_callback,
+        is_eager=True,
+        help="Show the version and exit.",
+    ),
+):
     """
     SuperClean (sclean) - Reclaim your disk space.
     """
