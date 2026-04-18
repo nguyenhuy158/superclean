@@ -23,6 +23,11 @@ class BaseCleaner(ABC):
 
     @property
     @abstractmethod
+    def category(self) -> str:
+        pass
+
+    @property
+    @abstractmethod
     def description(self) -> str:
         pass
 

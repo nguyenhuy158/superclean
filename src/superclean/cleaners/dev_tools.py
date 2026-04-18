@@ -10,6 +10,10 @@ class BrewCleaner(BaseCleaner):
         return "brew"
 
     @property
+    def category(self) -> str:
+        return "Tools"
+
+    @property
     def description(self) -> str:
         return "Cleans old Homebrew versions and cache"
 
@@ -33,6 +37,10 @@ class XcodeCleaner(BaseCleaner):
     @property
     def name(self) -> str:
         return "xcode"
+
+    @property
+    def category(self) -> str:
+        return "Tools"
 
     @property
     def description(self) -> str:
@@ -69,6 +77,10 @@ class CargoCleaner(BaseCleaner):
         return "cargo"
 
     @property
+    def category(self) -> str:
+        return "Tools"
+
+    @property
     def description(self) -> str:
         return "Cleans Cargo registry and git caches"
 
@@ -98,6 +110,10 @@ class CondaCleaner(BaseCleaner):
     @property
     def name(self) -> str:
         return "conda"
+
+    @property
+    def category(self) -> str:
+        return "Tools"
 
     @property
     def description(self) -> str:

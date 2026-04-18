@@ -10,6 +10,10 @@ class SystemCleaner(BaseCleaner):
         return "system"
 
     @property
+    def category(self) -> str:
+        return "System"
+
+    @property
     def description(self) -> str:
         return "Cleans system temporary files"
 

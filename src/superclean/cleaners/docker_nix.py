@@ -10,6 +10,10 @@ class DockerCleaner(BaseCleaner):
         return "docker"
 
     @property
+    def category(self) -> str:
+        return "Containers"
+
+    @property
     def description(self) -> str:
         return "Cleans unused Docker images, containers, and volumes"
 
@@ -44,6 +48,10 @@ class NixCleaner(BaseCleaner):
     @property
     def name(self) -> str:
         return "nix"
+
+    @property
+    def category(self) -> str:
+        return "Tools"
 
     @property
     def description(self) -> str:

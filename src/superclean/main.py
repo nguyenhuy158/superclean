@@ -1,9 +1,12 @@
 import typer
 from rich.console import Console
 from rich.table import Table
+from rich.panel import Panel
+from rich.columns import Columns
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from typing import Optional
 import os
+import shutil
 
 from .core import CleanerRegistry
 from .cleaners.python_node import PythonCleaner, NodeCleaner
@@ -79,6 +82,56 @@ def main(
 
 
 @app.command()
+def status(ctx: typer.Context):
+    """Show a high-level dashboard of potential savings."""
+    registry = get_registry()
+    category_savings = {}
+    total_savings = 0
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        transient=True,
+    ) as progress:
+        task = progress.add_task("Analyzing system health...", total=len(registry.get_all()))
+        for cleaner in registry.get_all():
+            space = cleaner.check_space()
+            cat = cleaner.category
+            category_savings[cat] = category_savings.get(cat, 0) + space
+            total_savings += space
+            progress.advance(task)
+
+    # Hero Panel
+    console.print(
+        Panel(
+            f"[bold green]{format_size(total_savings)}[/bold green]",
+            title="Total Potential Savings",
+            subtitle="Run `sclean all` to reclaim",
+            style="cyan",
+        )
+    )
+
+    # Category Panels
+    panels = []
+    for cat, space in category_savings.items():
+        color = "green" if space > 0 else "dim"
+        panels.append(
+            Panel(
+                f"[bold {color}]{format_size(space)}[/bold {color}]",
+                title=cat,
+                border_style="blue",
+            )
+        )
+    
+    console.print(Columns(panels))
+
+    # System Info
+    import platform
+    sys_info = f"OS: [cyan]{platform.system()} {platform.release()}[/cyan] | SuperClean: [cyan]{__version__}[/cyan]"
+    console.print(f"\n[dim]{sys_info}[/dim]")
+
+
+@app.command()
 def list_cleaners(ctx: typer.Context):
     """List all available cleaners and potential space savings."""
     registry = get_registry()
@@ -104,6 +157,59 @@ def list_cleaners(ctx: typer.Context):
             progress.advance(task)
 
     console.print(table)
+
+
+@app.command()
+def cron(
+    ctx: typer.Context,
+    install: bool = typer.Option(False, "--install", help="Install weekly cron job"),
+    uninstall: bool = typer.Option(False, "--uninstall", help="Remove sclean cron job"),
+):
+    """Manage weekly maintenance automation (via crontab)."""
+    import sys
+    import subprocess
+
+    # Try to find the absolute path of sclean
+    # If installed via pip, it should be in the path.
+    # We use 'which' to find it, or fallback to sys.argv[0]
+    sclean_path = shutil.which("sclean")
+    if not sclean_path:
+        sclean_path = os.path.abspath(sys.argv[0])
+
+    cron_cmd = f"0 0 * * 0 {sclean_path} all --force > /dev/null 2>&1"
+    
+    # Get current crontab
+    try:
+        current_cron = subprocess.check_output(["crontab", "-l"], text=True, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError:
+        current_cron = ""
+
+    if uninstall:
+        new_cron = "\n".join([line for line in current_cron.splitlines() if "sclean" not in line and "superclean" not in line])
+        process = subprocess.Popen(["crontab", "-"], stdin=subprocess.PIPE, text=True)
+        process.communicate(input=new_cron)
+        console.print("[bold green]Success![/bold green] sclean cron job removed.")
+        return
+
+    if install:
+        if "sclean" in current_cron or "superclean" in current_cron:
+            console.print("[yellow]sclean cron job is already installed.[/yellow]")
+            return
+        
+        new_cron = current_cron.strip() + "\n" + cron_cmd + "\n"
+        process = subprocess.Popen(["crontab", "-"], stdin=subprocess.PIPE, text=True)
+        process.communicate(input=new_cron)
+        console.print("[bold green]Success![/bold green] Weekly cleanup scheduled (Sundays at midnight).")
+        return
+
+    # Default: view
+    sclean_jobs = [line for line in current_cron.splitlines() if "sclean" in line or "superclean" in line]
+    if sclean_jobs:
+        console.print("[bold blue]Current sclean cron jobs:[/bold blue]")
+        for job in sclean_jobs:
+            console.print(f"  {job}")
+    else:
+        console.print("[yellow]No sclean cron jobs found.[/yellow]\nUse `sclean cron --install` to set up weekly cleanup.")
 
 
 @app.command()
@@ -171,6 +277,10 @@ def projects(
     class SizeHelper(BaseCleaner):
         @property
         def name(self):
+            return ""
+
+        @property
+        def category(self):
             return ""
 
         @property

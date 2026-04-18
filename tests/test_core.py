@@ -7,6 +7,10 @@ class MockCleaner(BaseCleaner):
         return "mock"
 
     @property
+    def category(self):
+        return "mock category"
+
+    @property
     def description(self):
         return "mock description"
 

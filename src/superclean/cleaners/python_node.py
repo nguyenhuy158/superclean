@@ -10,6 +10,10 @@ class PythonCleaner(BaseCleaner):
         return "python"
 
     @property
+    def category(self) -> str:
+        return "Runtimes"
+
+    @property
     def description(self) -> str:
         return "Cleans pip, poetry, uv caches and __pycache__"
 
@@ -66,6 +70,10 @@ class NodeCleaner(BaseCleaner):
     @property
     def name(self) -> str:
         return "node"
+
+    @property
+    def category(self) -> str:
+        return "Runtimes"
 
     @property
     def description(self) -> str:
