@@ -9,6 +9,7 @@ import os
 import shutil
 import platform
 import psutil
+import time
 
 from .core import CleanerRegistry
 from .cleaners.python_node import PythonCleaner, NodeCleaner
@@ -66,6 +67,35 @@ def format_size(size_bytes):
     return f"{s} {size_name[i]}"
 
 
+def parse_size(size_str: str) -> int:
+    """Parse human readable size strings into bytes (e.g., 500MB, 1.2GB)."""
+    if not size_str:
+        return 0
+    size_str = size_str.upper().strip()
+    
+    # Extract numeric part and unit
+    import re
+    match = re.match(r"^([\d.]+)\s*([A-Z]+)$", size_str)
+    if not match:
+        try:
+            return int(size_str) # Assume bytes if no unit
+        except ValueError:
+            return 0
+            
+    value = float(match.group(1))
+    unit = match.group(2)
+    
+    units = {
+        "B": 1,
+        "K": 1024, "KB": 1024,
+        "M": 1024**2, "MB": 1024**2,
+        "G": 1024**3, "GB": 1024**3,
+        "T": 1024**4, "TB": 1024**4,
+    }
+    
+    return int(value * units.get(unit, 1))
+
+
 def version_callback(value: bool):
     if value:
         console.print(f"SuperClean version: [bold cyan]{__version__}[/bold cyan]")
@@ -103,11 +133,15 @@ def main(
 
 
 @app.command()
-def status(ctx: typer.Context):
+def status(
+    ctx: typer.Context,
+    min_size: str = typer.Option(None, "--min-size", help="Only show cleaners if potential savings > threshold"),
+):
     """Show a high-level dashboard of system health and potential savings."""
     registry = get_registry()
     category_savings = {}
     total_savings = 0
+    threshold_bytes = parse_size(min_size) if min_size else 0
 
     with Progress(
         SpinnerColumn(),
@@ -117,9 +151,10 @@ def status(ctx: typer.Context):
         task = progress.add_task("Analyzing system health...", total=len(registry.get_all()))
         for cleaner in registry.get_all():
             space = cleaner.check_space()
-            cat = cleaner.category
-            category_savings[cat] = category_savings.get(cat, 0) + space
-            total_savings += space
+            if space >= threshold_bytes:
+                cat = cleaner.category
+                category_savings[cat] = category_savings.get(cat, 0) + space
+                total_savings += space
             progress.advance(task)
 
     # Hero Panel
@@ -343,6 +378,126 @@ def cron(
 
 
 @app.command()
+def explore(path: str = typer.Argument(".", help="Directory to explore")):
+    """Interactive disk usage explorer (ncdu-like)."""
+    current_path = os.path.abspath(path)
+    
+    # We need the SizeHelper from projects command logic, 
+    # but we can just use a local helper for simplicity here.
+    from .core import BaseCleaner, CleanResult
+    class ExplorerHelper(BaseCleaner):
+        @property
+        def name(self): return ""
+        @property
+        def category(self): return ""
+        @property
+        def description(self): return ""
+        def check_space(self): return 0
+        def clean(self, dry_run=False): return CleanResult("", 0, True)
+    
+    helper = ExplorerHelper()
+
+    while True:
+        console.clear()
+        console.print(Panel(f"[bold cyan]{current_path}[/bold cyan]", title="Exploring"))
+        
+        items = []
+        try:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                transient=True,
+            ) as progress:
+                task = progress.add_task("Scanning directory...", total=None)
+                for entry in os.scandir(current_path):
+                    size = entry.stat().st_size if entry.is_file() else helper.get_dir_size(entry.path)
+                    items.append({
+                        "name": entry.name,
+                        "path": entry.path,
+                        "is_dir": entry.is_dir(),
+                        "size": size
+                    })
+                    progress.advance(task)
+        except PermissionError:
+            console.print("[bold red]Permission Denied[/bold red]")
+            time.sleep(1)
+            current_path = os.path.dirname(current_path)
+            continue
+
+        # Sort by size descending
+        items.sort(key=lambda x: x["size"], reverse=True)
+
+        table = Table(box=None, expand=True)
+        table.add_column("Type", width=6)
+        table.add_column("Name", style="cyan")
+        table.add_column("Size", justify="right", style="magenta")
+
+        choices = []
+        # Add "Go Back" if not at root
+        if current_path != "/":
+            choices.append(questionary.Choice(title=" .. (Go Back)", value="BACK"))
+            table.add_row("DIR", "..", "")
+
+        for item in items:
+            type_str = "DIR" if item["is_dir"] else "FILE"
+            table.add_row(type_str, item["name"], format_size(item["size"]))
+            
+            # Choice formatting
+            prefix = "📁" if item["is_dir"] else "📄"
+            choices.append(questionary.Choice(
+                title=f"{prefix} {item['name']:<40} {format_size(item['size']):>10}",
+                value=item
+            ))
+
+        console.print(table)
+        
+        choices.append(questionary.Choice(title="[Exit Explorer]", value="EXIT"))
+        
+        import questionary
+        action = questionary.select(
+            "Select an item to enter or manage:",
+            choices=choices,
+            style=questionary.Style([
+                ('highlighted', 'fg:cyan bold'),
+                ('pointer', 'fg:cyan bold'),
+            ])
+        ).ask()
+
+        if action == "EXIT" or action is None:
+            break
+        elif action == "BACK":
+            current_path = os.path.dirname(current_path)
+        elif isinstance(action, dict):
+            if action["is_dir"]:
+                sub_action = questionary.select(
+                    f"Action for {action['name']}:",
+                    choices=[
+                        questionary.Choice("Enter Directory", "ENTER"),
+                        questionary.Choice(f"DELETE {action['name']}", "DELETE"),
+                        "Cancel"
+                    ]
+                ).ask()
+                
+                if sub_action == "ENTER":
+                    current_path = action["path"]
+                elif sub_action == "DELETE":
+                    if typer.confirm(f"Are you sure you want to delete {action['name']}?"):
+                        shutil.rmtree(action["path"], ignore_errors=True)
+            else:
+                sub_action = questionary.select(
+                    f"Action for {action['name']}:",
+                    choices=[
+                        questionary.Choice(f"DELETE {action['name']}", "DELETE"),
+                        "Cancel"
+                    ]
+                ).ask()
+                
+                if sub_action == "DELETE":
+                    if typer.confirm(f"Are you sure you want to delete {action['name']}?"):
+                        os.remove(action["path"])
+
+
+@app.command()
 def projects(
     ctx: typer.Context,
     path: str = typer.Argument(".", help="Directory to scan"),
@@ -372,25 +527,35 @@ def projects(
         transient=True,
     ) as progress:
         task = progress.add_task(f"Scanning {path}...", total=None)
-
         abs_path = os.path.abspath(path)
-        for root, dirs, files in os.walk(abs_path):
-            # Check if current directory itself is a target
-            # However, usually we look for targets inside projects.
-            # If we find a target, we don't need to look inside it.
-            i = 0
-            while i < len(dirs):
-                d = dirs[i]
-                if d in target_names:
-                    full_path = os.path.join(root, d)
-                    found_folders.append(full_path)
-                    # Don't recurse into found target folders
-                    dirs.pop(i)
-                else:
-                    i += 1
-            if not recursive:
-                break
-            progress.advance(task)
+
+        # Optimization: use 'fd' if available
+        fd_path = shutil.which("fd")
+        if fd_path and recursive:
+            import subprocess
+            targets_regex = "|".join([f"^{n}$" for n in target_names])
+            cmd = [fd_path, "-H", "-t", "d", targets_regex, abs_path]
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+                found_folders = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+            except subprocess.CalledProcessError:
+                # Fallback to os.walk if fd fails
+                pass
+        
+        if not found_folders:
+            for root, dirs, files in os.walk(abs_path):
+                i = 0
+                while i < len(dirs):
+                    d = dirs[i]
+                    if d in target_names:
+                        full_path = os.path.join(root, d)
+                        found_folders.append(full_path)
+                        dirs.pop(i)
+                    else:
+                        i += 1
+                if not recursive:
+                    break
+                progress.advance(task)
 
     if not found_folders:
         console.print("[yellow]No project development folders found.[/yellow]")
@@ -460,8 +625,6 @@ def projects(
         ) as progress:
             task = progress.add_task("Deleting...", total=len(found_folders))
             for p in found_folders:
-                import shutil
-
                 shutil.rmtree(p, ignore_errors=True)
                 progress.advance(task)
 
@@ -472,12 +635,61 @@ def projects(
 def all(
     ctx: typer.Context,
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
+    interactive: bool = typer.Option(False, "--interactive", "-i", help="Select cleaners interactively"),
+    min_size: str = typer.Option(None, "--min-size", help="Only clean if potential savings > threshold (e.g. 500MB)"),
 ):
     """Clean all detected application caches."""
     registry = get_registry()
     dry_run = ctx.obj.get("dry_run", False)
+    threshold_bytes = parse_size(min_size) if min_size else 0
 
-    if not force and not dry_run:
+    cleaners_to_run = registry.get_all()
+
+    # Pre-calculate space for threshold or interactive mode
+    if interactive or threshold_bytes > 0:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            transient=True,
+        ) as progress:
+            task = progress.add_task("Analyzing caches...", total=len(cleaners_to_run))
+            valid_cleaners = []
+            for cleaner in cleaners_to_run:
+                space = cleaner.check_space()
+                if space >= threshold_bytes:
+                    valid_cleaners.append((cleaner, space))
+                progress.advance(task)
+            
+            if interactive:
+                import questionary
+                choices = [
+                    questionary.Choice(
+                        title=f"{c.name} ({format_size(s)})",
+                        value=c
+                    ) for c, s in valid_cleaners
+                ]
+                if not choices:
+                    console.print("[yellow]No cleaners found meeting the threshold.[/yellow]")
+                    return
+                
+                selected = questionary.checkbox(
+                    "Select cleaners to run:",
+                    choices=choices,
+                    default=[c.value for c in choices]
+                ).ask()
+                
+                if not selected:
+                    console.print("No cleaners selected. Aborting.")
+                    return
+                cleaners_to_run = selected
+            else:
+                cleaners_to_run = [c for c, s in valid_cleaners]
+
+    if not cleaners_to_run:
+        console.print("[yellow]No caches to clean based on current filters.[/yellow]")
+        return
+
+    if not force and not dry_run and not interactive:
         confirm = typer.confirm("Are you sure you want to clean all caches?")
         if not confirm:
             raise typer.Abort()
@@ -486,7 +698,7 @@ def all(
         console.print("[bold yellow][DRY RUN][/bold yellow] Previewing clean up...")
 
     total_reclaimed = 0
-    for cleaner in registry.get_all():
+    for cleaner in cleaners_to_run:
         console.print(f"Cleaning [bold cyan]{cleaner.name}[/bold cyan]...")
         result = cleaner.clean(dry_run=dry_run)
         if result.success:
