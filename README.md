@@ -15,6 +15,7 @@ sclean --help
 sclean status          # High-level health dashboard
 sclean info            # Detailed system resource info
 sclean explore         # Interactive disk usage explorer (ncdu-like)
+sclean ui              # Full-screen TUI dashboard to scan & clean caches (requires: pip install 'superclean[tui]')
 sclean check           # Check for useful developer tools
 sclean list-cleaners   # Detailed list of all cleaners
 sclean all             # Run all cleaners
@@ -31,6 +32,7 @@ sclean docker          # Clean specific tool
 - **Global Dry Run**: Use `-d` or `--dry-run` with any command to preview potential savings.
 - **Health Dashboard**: `sclean status` gives a visually appealing summary of potential savings.
 - **Interactive Mode**: Use `sclean all -i` to selectively clean specific caches using a TUI menu.
+- **Cache Dashboard**: `sclean ui` opens a full-screen Textual dashboard (ncdu/lazydocker-style) listing every cache target by size, with space-to-select, clean-with-confirmation, and rescan. Optional dependency: `pip install 'superclean[tui]'`.
 - **Smart Thresholds**: Filter cleanups by size using `--min-size` to focus on the biggest wins.
 - **Detailed Info**: `sclean info` shows comprehensive system resource usage.
 - **Project Scanner**: `sclean projects` recursively finds and deletes heavy local folders like `node_modules`, `venv`, `target`. **Optimized with `fd`** if installed.

@@ -25,6 +25,10 @@
 - `sclean <app>`: Clean a specific app (e.g., `sclean pip`).
 - `sclean --dry-run`: Show what would be deleted.
 - `sclean --force`: Skip confirmation.
+- `sclean ui`: Full-screen Textual dashboard (ncdu/lazydocker-style) — scans all cache
+  targets in the background, lets you select rows with space/`a`, and clean with
+  confirmation via `x`/`c`. Optional dependency (`superclean[tui]`); lazily imported
+  so plain usage is unaffected when textual isn't installed.
 
 ## Project Management
 A `Makefile` will be provided to streamline development and release tasks.

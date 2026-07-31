@@ -23,6 +23,13 @@ class SystemCleaner(BaseCleaner):
     def check_space(self) -> int:
         return self.get_dir_size(self._get_temp_dir())
 
+    # No get_cache_paths() override: `clean()` deletes only the *contents*
+    # of the OS temp dir, never the dir itself. Exposing this as a row-level
+    # CacheTarget (path-level rmtree) would delete the temp dir itself,
+    # which is more destructive than the existing clean() semantics — so
+    # this cleaner opts out of the dashboard's path-level UI, same as
+    # docker/nix/brew/conda.
+
     def clean(self, dry_run: bool = False) -> CleanResult:
         reclaimed = self.check_space()
         temp_dir = self._get_temp_dir()

@@ -60,6 +60,12 @@ class XcodeCleaner(BaseCleaner):
         total += self.get_dir_size(self._get_device_support())
         return total
 
+    def get_cache_paths(self):
+        return [
+            ("xcode (DerivedData)", self._get_derived_data()),
+            ("xcode (DeviceSupport)", self._get_device_support()),
+        ]
+
     def clean(self, dry_run: bool = False) -> CleanResult:
         reclaimed = self.check_space()
         if not dry_run:
@@ -97,6 +103,12 @@ class CargoCleaner(BaseCleaner):
         total = self.get_dir_size(self._get_registry())
         total += self.get_dir_size(self._get_git_cache())
         return total
+
+    def get_cache_paths(self):
+        return [
+            ("cargo (registry)", self._get_registry()),
+            ("cargo (git)", self._get_git_cache()),
+        ]
 
     def clean(self, dry_run: bool = False) -> CleanResult:
         reclaimed = self.check_space()

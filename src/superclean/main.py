@@ -11,32 +11,12 @@ import platform
 import psutil
 import time
 
-from .core import CleanerRegistry
-from .cleaners.python_node import PythonCleaner, NodeCleaner
-from .cleaners.docker_nix import DockerCleaner, NixCleaner
-from .cleaners.system import SystemCleaner
-from .cleaners.dev_tools import BrewCleaner, XcodeCleaner, CargoCleaner, CondaCleaner
-from .cleaners.utilities import LazyGitCleaner, LazyDockerCleaner
+from .core import format_size
+from .registry import build_registry as get_registry
 from . import __version__
 
 app = typer.Typer(help="Universal CLI tool to clean development caches.")
 console = Console()
-
-
-def get_registry():
-    registry = CleanerRegistry()
-    registry.register(PythonCleaner())
-    registry.register(NodeCleaner())
-    registry.register(DockerCleaner())
-    registry.register(NixCleaner())
-    registry.register(SystemCleaner())
-    registry.register(BrewCleaner())
-    registry.register(XcodeCleaner())
-    registry.register(CargoCleaner())
-    registry.register(CondaCleaner())
-    registry.register(LazyGitCleaner())
-    registry.register(LazyDockerCleaner())
-    return registry
 
 
 def get_useful_tools():
@@ -53,18 +33,6 @@ def get_useful_tools():
         ("bat", "bat"),
         ("tldr", "tldr"),
     ]
-
-
-def format_size(size_bytes):
-    if size_bytes == 0:
-        return "0 B"
-    size_name = ("B", "KB", "MB", "GB", "TB")
-    import math
-
-    i = int(math.floor(math.log(size_bytes, 1024)))
-    p = math.pow(1024, i)
-    s = round(size_bytes / p, 2)
-    return f"{s} {size_name[i]}"
 
 
 def parse_size(size_str: str) -> int:
@@ -375,6 +343,28 @@ def cron(
             console.print(f"  {job}")
     else:
         console.print("[yellow]No sclean cron jobs found.[/yellow]\nUse `sclean cron --install` to set up weekly cleanup.")
+
+
+@app.command()
+def ui(ctx: typer.Context):
+    """Full-screen interactive dashboard to scan and clean caches (ncdu-style).
+
+    Requires the optional 'textual' dependency: pip install 'superclean[tui]'.
+    """
+    dry_run = ctx.obj.get("dry_run", False)
+    try:
+        from .dashboard import CacheDashboard
+    except ImportError:
+        console.print(
+            "Error: the interactive dashboard requires the 'textual' package.",
+            style="bold red",
+        )
+        console.print(
+            "Install it with: pip install 'superclean[tui]'  (or: uv pip install 'superclean[tui]')",
+            markup=False,
+        )
+        raise typer.Exit(code=1) from None
+    CacheDashboard(dry_run=dry_run).run()
 
 
 @app.command()

@@ -48,6 +48,13 @@ class PythonCleaner(BaseCleaner):
             total += self.get_dir_size(path)
         return total
 
+    def get_cache_paths(self):
+        return [
+            ("python (pip)", self._get_pip_cache()),
+            ("python (poetry)", self._get_poetry_cache()),
+            ("python (uv)", self._get_uv_cache()),
+        ]
+
     def clean(self, dry_run: bool = False) -> CleanResult:
         reclaimed = self.check_space()
         if not dry_run:
@@ -105,6 +112,13 @@ class NodeCleaner(BaseCleaner):
         ]:
             total += self.get_dir_size(path)
         return total
+
+    def get_cache_paths(self):
+        return [
+            ("node (npm)", self._get_npm_cache()),
+            ("node (yarn)", self._get_yarn_cache()),
+            ("node (pnpm)", self._get_pnpm_cache()),
+        ]
 
     def clean(self, dry_run: bool = False) -> CleanResult:
         reclaimed = self.check_space()

@@ -26,6 +26,9 @@ class LazyGitCleaner(BaseCleaner):
     def check_space(self) -> int:
         return self.get_dir_size(self._get_log_dir())
 
+    def get_cache_paths(self):
+        return [("lazygit (logs)", self._get_log_dir())]
+
     def clean(self, dry_run: bool = False) -> CleanResult:
         reclaimed = self.check_space()
         path = self._get_log_dir()
@@ -56,6 +59,9 @@ class LazyDockerCleaner(BaseCleaner):
 
     def check_space(self) -> int:
         return self.get_dir_size(self._get_log_dir())
+
+    def get_cache_paths(self):
+        return [("lazydocker (logs)", self._get_log_dir())]
 
     def clean(self, dry_run: bool = False) -> CleanResult:
         reclaimed = self.check_space()
